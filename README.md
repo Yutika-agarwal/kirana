@@ -1,22 +1,27 @@
 # kirana
 
-A shopping agent that reorders from your purchase history. It learns what you
-buy repeatedly, works out when it is due, builds a cart for any store, and
-**waits for your approval** before anything is bought.
+A shopping agent that reorders from **your own** purchase history. Ask for something in plain
+English ("coffee and oat milk"); it picks the product you usually buy, builds a cart for any
+store, and **waits for your approval** before anything is bought.
 
-```
-ingest order emails -> predict what is due -> plan carts -> approve -> place / hand off
-```
+<p align="center"><img src="docs/ui.png" alt="Kirana chat UI (example data)" width="320"></p>
 
-## Chat UI
+## Make your own in 2 minutes
 
 ```bash
-python3 -m kirana serve      # then open http://127.0.0.1:8765
+git clone https://github.com/Yutika-agarwal/kirana && cd kirana
+python3 -m kirana ingest examples/orders.example.json    # example data; swap in your own orders
+python3 -m kirana serve                                  # chat UI: http://127.0.0.1:8765
 ```
 
-Type what you want ("coffee and pistachios", "what's due?"). It picks the product you usually
-buy from your history and builds a cart. Pressing **Approve cart** is the approval; checkout stays with you.
-The server only listens on your own machine.
+- **Chat UI:** [`kirana/static/index.html`](kirana/static/index.html) served by [`kirana/web.py`](kirana/web.py). Runs only on your computer.
+- **Your data stays yours.** Each person runs their own copy with their own order history in a local
+  database (`~/.kirana/kirana.db`). Nothing is uploaded anywhere, and `data/*.json`, `*.db`, `.env`
+  files are git-ignored so history can't be committed by accident.
+- **No logins are stored or shared.** kirana never asks for or keeps store passwords. Where it
+  fills a store cart, it works inside *your* already-signed-in browser, and checkout/payment is always your click.
+- **Build your own agent on top:** see [docs/BUILD_YOUR_OWN.md](docs/BUILD_YOUR_OWN.md) (new stores,
+  new order-email formats, letting an AI assistant fill carts for you).
 
 ## Quick start
 

@@ -13,12 +13,12 @@ from kirana.parsers import parse_email, parse_order_email_text
 ROOT = Path(__file__).resolve().parent.parent
 TODAY = date(2026, 11, 7)
 
-# Same shape as a real Target confirmation email (tracking links and address removed).
+# Same shape as a Target confirmation email, with made-up names and numbers.
 TARGET_EMAIL = """
 https://click.oe1.target.com/?qs=abc
-Order #912003789581175
+Order #100000000000001
 
- Thanks for your order, Yutika!
+ Thanks for your order, Alex!
 
  Placed October 2, 2026
 
@@ -26,7 +26,7 @@ Order #912003789581175
 $41.26
 
 https://click.oe1.target.com/?qs=def
-Carter's Just One You&#174; Baby Cotton Beanie - Ivory 0-12M
+Example Brand&#174; Cotton Beanie - Ivory
 
  Qty: 1
 
@@ -62,11 +62,11 @@ def seed_weekly(conn, item="whole milk", every=7, count=4, last_ago=8, qty=2, pr
 
 def test_parse_target_email():
     o = parse_order_email_text(TARGET_EMAIL, "target")
-    assert o["order_id"] == "912003789581175"
+    assert o["order_id"] == "100000000000001"
     assert o["placed_on"] == "2026-10-02"
     assert o["total"] == 41.26
     assert [i["qty"] for i in o["items"]] == [1, 9]
-    assert o["items"][0]["name"].startswith("Carter's Just One You")
+    assert o["items"][0]["name"].startswith("Example Brand")
     assert o["items"][1]["unit_price"] == 3.99
 
 
@@ -83,17 +83,6 @@ def test_ingest_is_idempotent(conn, tmp_path):
     assert len(db.purchase_rows(conn)) == 2
 
 
-@pytest.mark.skipif(not (ROOT / "data" / "target_orders.json").exists(), reason="private data not in repo")
-def test_real_target_orders_file_loads(conn):
-    from kirana import ingest
-    added, _ = ingest.ingest_file(conn, str(ROOT / "data" / "target_orders.json"))
-    assert added == 3
-    # subtotal check from the emails: order 102003870136749 is 20 items, $90.91
-    rows = [r for r in db.purchase_rows(conn) if r["order_id"] == "102003870136749"]
-    assert sum(r["qty"] for r in rows) == 20
-    assert round(sum(r["qty"] * r["unit_price"] for r in rows), 2) == 90.91
-
-
 # Same shape as a real Amazon confirmation: two orders in one email, one of them
 # split across two shipment blocks, plus an eGift card line that must be skipped.
 AMAZON_EMAIL = """
@@ -101,7 +90,7 @@ Your Orders
 
 https://www.amazon.com/gp/css/order-history?ref_=fed_yo_default
 
-    Thanks for your order, yutika!
+    Thanks for your order, alex!
 Ordered
 
 Shipped
@@ -109,27 +98,27 @@ Shipped
 Arriving Saturday
 
 Order #
-111-0057991-8129829
+111-1111111-1111111
 
 View or edit order
-https://www.amazon.com/gp/css/order-details?orderID=111-0057991-8129829&ref_=p_btn_fed_veo
+https://www.amazon.com/gp/css/order-details?orderID=111-1111111-1111111&ref_=p_btn_fed_veo
 
-* Welcome Home Baby Girl Garden Flag for Yard Outside Pink Bow
+* Welcome Garden Flag for Yard Outside Floral
   Quantity: 1
   9.99 USD
 
 Arriving Monday
 
 Order #
-111-0057991-8129829
+111-1111111-1111111
 
 View or edit order
 
-* Bedtime Originals Twinkle Toes Pink Elephant Plush, Hazel, 1 Count (Pack of 1)
+* Example Plush Elephant Toy, Gray, 1 Count (Pack of 1)
   Quantity: 2
   13.99 USD
 
-* Amazon eGift Card - Zoo Animals (Animated)
+* Amazon eGift Card - Birthday
   Quantity: 1
   100 USD
 
@@ -139,11 +128,11 @@ Grand Total:
 Arriving March 25
 
 Order #
-111-5963525-6483421
+111-2222222-2222222
 
 View or edit order
 
-* Ouddy Party Champagne Gold Boho Baby Shower Decorations
+* Example Party Gold Boho Decorations
   Quantity: 1
   11.99 USD
 
@@ -154,12 +143,12 @@ Grand Total:
 
 def test_parse_amazon_multi_order_email():
     orders = parse_email("amazon", AMAZON_EMAIL, "2026-03-18")
-    assert [o["order_id"] for o in orders] == ["111-0057991-8129829", "111-5963525-6483421"]
+    assert [o["order_id"] for o in orders] == ["111-1111111-1111111", "111-2222222-2222222"]
     first, second = orders
     assert first["placed_on"] == "2026-03-18" and first["merchant"] == "amazon"
     # shipment blocks of the same order are merged; the eGift card is dropped
     assert [(i["name"][:20], i["qty"], i["unit_price"]) for i in first["items"]] == [
-        ("Welcome Home Baby Gi", 1, 9.99), ("Bedtime Originals Tw", 2, 13.99)]
+        ("Welcome Garden Flag ", 1, 9.99), ("Example Plush Elepha", 2, 13.99)]
     assert second["items"][0]["unit_price"] == 11.99
 
 
@@ -178,19 +167,6 @@ def test_amazon_email_ingest_via_cli(tmp_path, capsys):
     assert "0 new order(s)" in capsys.readouterr().out
 
 
-@pytest.mark.skipif(not (ROOT / "data" / "amazon_orders.json").exists(), reason="private data not in repo")
-def test_real_amazon_orders_file_loads(conn):
-    from kirana import ingest
-    added, _ = ingest.ingest_file(conn, str(ROOT / "data" / "amazon_orders.json"))
-    assert added == 31
-    rows = db.purchase_rows(conn, "amazon")
-    assert not any("egift" in r["name"].lower() for r in rows)
-    assert predict.recurring_items(conn) == []  # honest: nothing was bought twice
-    sugg = [s.name.split(",")[0] for s in predict.suggest_restock(conn, TODAY)]
-    assert "Heinz Tomato Ketchup" in sugg
-    assert not any("Ice Cube" in n for n in sugg)  # 'Coffee' in its keyword tail must not count
-
-
 def test_long_titles_normalize_to_stable_keys():
     a = db.normalize("Biotrue Contact Solution, Multi-Purpose Solution with Lens Case, Cleans, Conditions")
     b = db.normalize("Biotrue Contact Solution, Multi-Purpose Solution with Lens Case, Cleans, Hydrates, X")
@@ -205,7 +181,7 @@ def test_suggest_only_old_one_time_consumables(conn):
         {"name": "Lysol Disinfectant Wipes, Pack of 4", "qty": 1, "unit_price": 11.22},
         {"name": "Apple Pencil (USB-C)", "qty": 1, "unit_price": 69}])
     db.add_order(conn, "amazon", "2", TODAY - timedelta(days=10),
-                 [{"name": "Lavazza Espresso Coffee", "qty": 1, "unit_price": 17.49}])
+                 [{"name": "Example Espresso Coffee", "qty": 1, "unit_price": 17.49}])
     names = [s.name for s in predict.suggest_restock(conn, TODAY)]
     assert names == ["Lysol Disinfectant Wipes, Pack of 4"]  # not the pencil, not the fresh coffee
 
