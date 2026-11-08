@@ -82,11 +82,27 @@ def recurring_items(conn, min_orders: int = 2, merchant: str | None = None) -> l
 
 
 def predict_due(conn, today: date, horizon_days: int = 7, min_orders: int = 2,
-                merchant: str | None = None) -> list[Prediction]:
-    """Recurring items due now or within the horizon, most overdue first."""
+                merchant: str | None = None, min_interval_days: int = 5,
+                lapse_factor: float = 3.0, include_lapsed: bool = False) -> list[Prediction]:
+    """Recurring items due now or within the horizon, most overdue first.
+
+    Two sanity rules keep one-off buying bursts out of carts:
+    - repeats closer than `min_interval_days` (5) are returns/replacements/bundles, not a cadence;
+    - an item overdue by more than `lapse_factor` x its interval (and 60+ days) has
+      lapsed - you most likely stopped buying it - so it is not proposed.
+    """
     due = []
     for p in recurring_items(conn, min_orders, merchant):
         if p.due_date > today + timedelta(days=horizon_days):
+            continue
+        if p.interval_days < min_interval_days:
+            continue
+        # one-time gear (bottles, hose reels, cases) that happened to be bought twice
+        # is not a replenishment cycle; only trust low-confidence repeats for consumables
+        if p.confidence == "low" and not CONSUMABLE.search(p.name):
+            continue
+        overdue_by = (today - p.due_date).days
+        if not include_lapsed and overdue_by > max(lapse_factor * p.interval_days, 60):
             continue
         p.status = "overdue" if p.due_date < today else ("due" if p.due_date == today else "upcoming")
         due.append(p)
@@ -98,7 +114,7 @@ CONSUMABLE = re.compile(
     r"\b(wipes?|solution|vitamins?|supplements?|capsules?|tablets?|coffee|tea|sunscreen|"
     r"ketchup|toothpaste|detergent|soap|shampoo|conditioner|paper towels?|tissues?|diapers?|"
     r"crackers|pistachios|snacks?|rice|flour|oil|spice|sauce|batteries|trash bags?|"
-    r"floss|lotion|cleaner)\b",
+    r"floss|lotion|cleaner|bandages?|gum|ointment|multivitamin|pops|formula|wipes)\b",
     re.IGNORECASE,
 )
 
