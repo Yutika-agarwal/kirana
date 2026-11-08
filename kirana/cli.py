@@ -103,11 +103,23 @@ def cmd_plan(conn, args):
 
 
 def cmd_ask(conn, args):
-    """Plain-English request -> proposed carts (never buys)."""
+    """Plain-English request -> your usual product from history -> proposed cart (never buys)."""
     today = _today(args)
     wants = planner.parse_request(" ".join(args.prompt))
     for w in wants:
-        w["est_unit_price"] = planner.estimate_price(conn, w["store"], w["name"])
+        best, alts = planner.resolve_preference(conn, w["name"], w["store"])
+        if best:
+            w.update(name=best["name"], est_unit_price=best["unit_price"] or None,
+                     reason=f"your usual: bought {best['times']}x, last {best['last']}")
+            if w["store"] == planner.DEFAULT_STORE:
+                w["store"] = best["store"]
+            for a in alts:
+                print(f"  (also matched: {planner.display_name(a['name'], 60)} - {a['times']}x)")
+        else:
+            if w["store"] == planner.DEFAULT_STORE:
+                w["store"] = "amazon"
+            w["est_unit_price"] = None
+            w["reason"] = "no history for this - will search the store, pick one yourself"
     preds = predict.predict_due(conn, today) if args.with_due else []
     carts = planner.build_carts(preds, wants)
     ids = planner.persist(conn, carts, today)
@@ -189,6 +201,11 @@ def cmd_complete(conn, args):
     return 0
 
 
+def cmd_serve(args):
+    from .web import serve
+    return serve(args.db, args.port, date.fromisoformat(args.today) if args.today else None)
+
+
 def cmd_demo(args):
     from .demo import run_demo
     return run_demo()
@@ -255,6 +272,10 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("complete", help="record a handed-off cart as bought after you checked out")
     s.add_argument("cart_id", type=int)
     s.set_defaults(fn=cmd_complete)
+
+    s = sub.add_parser("serve", help="open the chat UI in your browser (http://127.0.0.1:8765)")
+    s.add_argument("--port", type=int, default=8765)
+    s.set_defaults(fn=cmd_serve, no_db=True)
 
     sub.add_parser("demo", help="run the whole flow on synthetic data and a fake store").set_defaults(fn=cmd_demo, no_db=True)
     return p

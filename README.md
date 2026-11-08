@@ -8,6 +8,16 @@ buy repeatedly, works out when it is due, builds a cart for any store, and
 ingest order emails -> predict what is due -> plan carts -> approve -> place / hand off
 ```
 
+## Chat UI
+
+```bash
+python3 -m kirana serve      # then open http://127.0.0.1:8765
+```
+
+Type what you want ("coffee and pistachios", "what's due?"). It picks the product you usually
+buy from your history and builds a cart. Pressing **Approve cart** is the approval; checkout stays with you.
+The server only listens on your own machine.
+
 ## Quick start
 
 ```bash

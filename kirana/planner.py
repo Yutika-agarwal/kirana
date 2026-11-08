@@ -66,6 +66,35 @@ def parse_request(text: str) -> list[dict]:
     return wants
 
 
+def resolve_preference(conn, name: str, store: str = DEFAULT_STORE):
+    """Find the product you usually buy for a loose request like 'coffee'.
+
+    Every word of the request must appear in a past item's title. Candidates are ranked by
+    how many separate days you bought them, then by recency. Returns (best, alternatives)
+    where each is a dict {name, store, times, last, unit_price}; best is None if no match.
+    """
+    def stem(w):  # 'band-aids' -> band, aid ; 'pistachios' -> pistachio
+        return w[:-1] if len(w) > 3 and w.endswith("s") else w
+    words = [stem(w) for w in re.findall(r"[a-z0-9']+", name.lower()) if w not in ("a", "the", "some", "of")]
+    if not words:
+        return None, []
+    groups: dict[tuple, dict] = {}
+    for r in db.purchase_rows(conn, None if store == DEFAULT_STORE else store):
+        title = r["name"].lower()
+        if not all(w in title for w in words):
+            continue
+        g = groups.setdefault((r["merchant"], r["norm"]), {
+            "name": r["name"], "store": r["merchant"], "dates": set(), "last": "", "unit_price": 0.0})
+        g["dates"].add(r["placed_on"])
+        if r["placed_on"] >= g["last"]:
+            g["last"], g["name"] = r["placed_on"], r["name"]
+            g["unit_price"] = r["unit_price"] or g["unit_price"]
+    ranked = sorted(groups.values(), key=lambda g: (len(g["dates"]), g["last"]), reverse=True)
+    for g in ranked:
+        g["times"] = len(g["dates"])
+    return (ranked[0] if ranked else None), ranked[1:4]
+
+
 def build_carts(predictions: list[Prediction], wants: list[dict],
                 suggestions: list | None = None) -> dict[str, list[dict]]:
     """Group lines by store. Predicted lines come from history; wants from the user;
@@ -102,7 +131,7 @@ def build_carts(predictions: list[Prediction], wants: list[dict],
                 "qty": w["qty"],
                 "est_unit_price": w.get("est_unit_price"),
                 "source": "requested",
-                "reason": "requested by you",
+                "reason": w.get("reason", "requested by you"),
             }
         )
     return dict(carts)

@@ -15,5 +15,8 @@ kirana = "kirana.cli:main"
 [tool.setuptools]
 packages = ["kirana", "kirana.stores"]
 
+[tool.setuptools.package-data]
+kirana = ["static/*.html"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
