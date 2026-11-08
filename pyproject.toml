@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kirana"
+version = "0.1.0"
+description = "Shopping agent that reorders from your purchase history, with an approval gate."
+requires-python = ">=3.10"
+dependencies = []
+
+[project.scripts]
+kirana = "kirana.cli:main"
+
+[tool.setuptools]
+packages = ["kirana", "kirana.stores"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

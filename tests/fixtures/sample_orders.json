@@ -1,0 +1,7 @@
+{"orders": [
+ {"merchant": "target", "order_id": "T-1", "placed_on": "2026-09-01",
+  "items": [{"name": "Wonderful Pistachios Roasted & Salted - 16oz", "qty": 2, "unit_price": 3.99},
+            {"name": "Paper Towels 6ct", "qty": 1, "unit_price": 9.49}]},
+ {"merchant": "target", "order_id": "T-2", "placed_on": "2026-10-02",
+  "items": [{"name": "Dish Soap Lemon", "qty": 1, "unit_price": 2.99}]}
+]}
